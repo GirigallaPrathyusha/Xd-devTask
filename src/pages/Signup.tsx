@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/components/ui/use-toast";
+import { supabase } from "@/lib/supabase";  
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -19,7 +20,7 @@ const Signup = () => {
     isAgency: "yes",
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.fullName || !formData.email || !formData.password) {
       toast({
@@ -29,8 +30,57 @@ const Signup = () => {
       });
       return;
     }
-    // In a real app, you would create the account here
-    navigate("/account");
+
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/login`
+        }
+      });
+
+      if (authError) {
+        if (authError.message.includes('User already registered')) {
+          toast({
+            title: "Account Already Exists",
+            description: "An account with this email already exists. Please login instead.",
+            variant: "destructive",
+          });
+          navigate("/login");
+          return;
+        }
+        throw authError;
+      }
+      
+      if (authData.user) {
+        const { error: profileError } = await supabase
+          .from('users')
+          .insert({
+            id: authData.user.id,
+            full_name: formData.fullName,
+            phone: formData.phone,
+            company: formData.company,
+            is_agency: formData.isAgency === 'yes'
+          });
+      
+        if (profileError) throw profileError;
+      
+        toast({
+          title: "Success!",
+          description: "Verification email sent. Please check your email.",
+        });
+      
+        navigate("/login");
+      }
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Something went wrong",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
